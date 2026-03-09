@@ -366,6 +366,12 @@ with tab1:
             "成約数": "OBA数",
         })
         display_cols = ["対象リスト", "約束数", "中期法施数", "約束→中期法施率(%)", "OBA数", "約束→OBA率(%)"]
+        sort_col1, sort_col2 = st.columns([3, 1])
+        with sort_col1:
+            sort_by1 = st.selectbox("並び替え項目", display_cols, index=4, key="tab1_sort_col")
+        with sort_col2:
+            sort_order1 = st.radio("順序", ["降順", "昇順"], horizontal=True, key="tab1_sort_order")
+        display = display.sort_values(sort_by1, ascending=(sort_order1 == "昇順")).reset_index(drop=True)
         st.dataframe(display[display_cols], use_container_width=True, hide_index=True)
 
 
@@ -397,6 +403,13 @@ with tab2:
     display_cols = ["担当者名", "アカウント名", "本部", "フォロー累計", "DM累計", "約束累計", "DM→約束率(%)"]
     if "成約数" in stats.columns:
         display_cols += ["成約数", "約束→成約率(%)"]
+    sortable_cols = [c for c in display_cols if c not in ["担当者名", "アカウント名", "本部"]]
+    sort_col1, sort_col2 = st.columns([3, 1])
+    with sort_col1:
+        sort_by2 = st.selectbox("並び替え項目", sortable_cols, index=0, key="tab2_sort_col")
+    with sort_col2:
+        sort_order2 = st.radio("順序", ["降順", "昇順"], horizontal=True, key="tab2_sort_order")
+    stats = stats.sort_values(sort_by2, ascending=(sort_order2 == "昇順")).reset_index(drop=True)
     st.dataframe(stats[display_cols], use_container_width=True, hide_index=True)
 
 
