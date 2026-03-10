@@ -185,12 +185,8 @@ def lookup_list_name(url: str, account_map: dict) -> str:
     return ""
 
 
-@st.cache_data(ttl=300)
-def load_account_map(sheet_id: str) -> dict:
-    """スプレッドシート2の1枚目シートを読み込み A列→F列 の辞書を返す"""
-    gc = get_client()
-    sh = gc.open_by_key(sheet_id)
-    rows = sh.sheet1.get_all_values()  # 1枚目のシートを自動で使用
+def _rows_to_account_map(rows: list) -> dict:
+    """行リスト（A列=アカウントID、F列=リスト名）をアカウントマップに変換"""
     result = {}
     for row in rows:
         if len(row) >= 6:
@@ -201,6 +197,22 @@ def load_account_map(sheet_id: str) -> dict:
                     and re.match(r'^[a-zA-Z0-9\s\-_.]+$', list_name)):
                 result[account_id] = list_name
     return result
+
+
+@st.cache_data(ttl=300)
+def load_account_map(sheet_id: str) -> dict:
+    """スプレッドシート2の1枚目シートを読み込み A列→F列 の辞書を返す"""
+    gc = get_client()
+    sh = gc.open_by_key(sheet_id)
+    rows = sh.sheet1.get_all_values()
+    return _rows_to_account_map(rows)
+
+
+def load_account_map_from_csv(uploaded_file) -> dict:
+    """アップロードされたCSVファイルから A列→F列 のアカウントマップを作成"""
+    df = pd.read_csv(uploaded_file, header=None, dtype=str).fillna("")
+    rows = df.values.tolist()
+    return _rows_to_account_map(rows)
 
 
 def fill_empty_ad_column(spreadsheet_id: str, yakusoku_sheet_name: str,
@@ -353,9 +365,15 @@ with st.sidebar:
 
     st.markdown("---")
     st.subheader("アカウントリスト照合")
-    default_acct_id = st.secrets.get("sheets", {}).get("account_sheet_id", "")
-    account_sheet_id = st.text_input("アカウントリストのスプレッドシートID", value=default_acct_id)
-    st.caption("※ 1枚目のシートを自動で使用します")
+    acct_source = st.radio("データソース", ["CSVファイル", "スプレッドシートID"], horizontal=True)
+    if acct_source == "CSVファイル":
+        uploaded_csv = st.file_uploader("CSVをアップロード", type="csv")
+        account_sheet_id = ""
+    else:
+        uploaded_csv = None
+        default_acct_id = st.secrets.get("sheets", {}).get("account_sheet_id", "")
+        account_sheet_id = st.text_input("スプレッドシートID", value=default_acct_id)
+        st.caption("※ 1枚目のシートを自動で使用します")
 
     if st.button("データを再読み込み"):
         st.cache_data.clear()
@@ -389,7 +407,13 @@ yakusoku_df      = parse_yakusoku_sheet(yakusoku_rows)
 
 # アカウントリスト照合（読み取り専用・メモリ上で処理）
 account_map = {}
-if account_sheet_id:
+if uploaded_csv is not None:
+    try:
+        account_map = load_account_map_from_csv(uploaded_csv)
+        st.sidebar.success(f"CSV読み込み完了: {len(account_map)} 件")
+    except Exception as e:
+        st.warning(f"CSVの読み込みに失敗しました: {e}")
+elif account_sheet_id:
     try:
         account_map = load_account_map(account_sheet_id)
     except Exception as e:
