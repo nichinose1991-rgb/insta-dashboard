@@ -154,6 +154,37 @@ def extract_instagram_id(url: str) -> str:
     return m.group(1).lower() if m else ""
 
 
+def _alnum_prefix(s: str) -> str:
+    """先頭の連続する半角英数字部分を返す"""
+    m = re.match(r'^[a-z0-9]+', s.lower())
+    return m.group(0) if m else ""
+
+
+def lookup_list_name(url: str, account_map: dict) -> str:
+    """
+    Instagram URL をアカウントリストと照合してリスト名を返す。
+    完全一致を優先し、なければ先頭英数字3文字以上の前方一致で検索。
+    """
+    url_id = extract_instagram_id(url)
+    if not url_id:
+        return ""
+    # 完全一致
+    if url_id in account_map:
+        return account_map[url_id]
+    # 前方一致（先頭英数字3文字以上）
+    url_prefix = _alnum_prefix(url_id)
+    if len(url_prefix) < 3:
+        return ""
+    for map_id, list_name in account_map.items():
+        map_prefix = _alnum_prefix(map_id)
+        if len(map_prefix) < 3:
+            continue
+        n = min(len(url_prefix), len(map_prefix))
+        if url_prefix[:n] == map_prefix[:n]:
+            return list_name
+    return ""
+
+
 @st.cache_data(ttl=300)
 def load_account_map(sheet_id: str) -> dict:
     """スプレッドシート2の1枚目シートを読み込み A列→F列 の辞書を返す"""
@@ -193,7 +224,7 @@ def fill_empty_ad_column(spreadsheet_id: str, yakusoku_sheet_name: str,
         url = row[10].strip() if len(row) > 10 else ""
         if not url:
             continue
-        list_name = account_map.get(extract_instagram_id(url), "")
+        list_name = lookup_list_name(url, account_map)
         if list_name:
             updates.append({"range": f"AD{i}", "values": [[list_name]]})
             written += 1
@@ -298,7 +329,7 @@ def build_list_analysis(yakusoku_df: pd.DataFrame, account_map: dict) -> pd.Data
 
     df = yakusoku_df.copy()
     df["対象リスト"] = df["Instagram URL"].apply(
-        lambda url: account_map.get(extract_instagram_id(url), "") if url else ""
+        lambda url: lookup_list_name(url, account_map) if url else ""
     )
     df = df[df["対象リスト"] != ""]
     if df.empty:
