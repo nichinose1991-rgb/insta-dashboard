@@ -29,7 +29,7 @@ st.set_page_config(
 # ─────────────────────────────────────────────
 #  定数
 # ─────────────────────────────────────────────
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 DAILY_START_COL = 10   # K列（0インデックス）
 COLS_PER_DAY = 4       # 対象 / Fw / DM / 約束
 EXCLUDE_LIST_NAMES = {"対象アカ"}
@@ -144,9 +144,11 @@ def extract_instagram_id(url: str) -> str:
 
 
 @st.cache_data(ttl=300)
-def load_account_map(sheet_id: str, sheet_tab: str) -> dict:
-    """スプレッドシート2のA列(アカウントID) → F列(リスト名) の辞書を返す（読み取り専用）"""
-    rows = load_sheet(sheet_id, sheet_tab)
+def load_account_map(sheet_id: str) -> dict:
+    """スプレッドシート2の1枚目シートを読み込み A列→F列 の辞書を返す"""
+    gc = get_client()
+    sh = gc.open_by_key(sheet_id)
+    rows = sh.sheet1.get_all_values()  # 1枚目のシートを自動で使用
     result = {}
     for row in rows:
         if len(row) >= 6:
@@ -157,6 +159,37 @@ def load_account_map(sheet_id: str, sheet_tab: str) -> dict:
                     and re.match(r'^[a-zA-Z0-9\s\-_.]+$', list_name)):
                 result[account_id] = list_name
     return result
+
+
+def fill_empty_ad_column(spreadsheet_id: str, yakusoku_sheet_name: str,
+                          yakusoku_rows: list, account_map: dict) -> tuple[int, int]:
+    """AD列が空欄の行のみリスト名を書き込む。(書き込み数, スキップ数)を返す"""
+    gc = get_client()
+    sh = gc.open_by_key(spreadsheet_id)
+    titles = {w.title.strip(): w for w in sh.worksheets()}
+    ws = titles.get(yakusoku_sheet_name.strip())
+    if ws is None:
+        raise ValueError(f"タブ '{yakusoku_sheet_name}' が見つかりません。")
+
+    updates = []
+    written = 0
+    skipped = 0
+    for i, row in enumerate(yakusoku_rows[1:], start=2):
+        current_ad = row[29].strip() if len(row) > 29 else ""
+        if current_ad:          # すでに値があればスキップ
+            skipped += 1
+            continue
+        url = row[10].strip() if len(row) > 10 else ""
+        if not url:
+            continue
+        list_name = account_map.get(extract_instagram_id(url), "")
+        if list_name:
+            updates.append({"range": f"AD{i}", "values": [[list_name]]})
+            written += 1
+
+    if updates:
+        ws.batch_update(updates)
+    return written, skipped
 
 
 def parse_follow_sheet(rows: list[list]) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -278,10 +311,9 @@ with st.sidebar:
 
     st.markdown("---")
     st.subheader("アカウントリスト照合")
-    default_acct_id  = st.secrets.get("sheets", {}).get("account_sheet_id", "")
-    default_acct_tab = st.secrets.get("sheets", {}).get("account_sheet_tab", "シート１")
-    account_sheet_id  = st.text_input("アカウントリストのスプレッドシートID", value=default_acct_id)
-    account_sheet_tab = st.text_input("アカウントリストのタブ名", value=default_acct_tab)
+    default_acct_id = st.secrets.get("sheets", {}).get("account_sheet_id", "")
+    account_sheet_id = st.text_input("アカウントリストのスプレッドシートID", value=default_acct_id)
+    st.caption("※ 1枚目のシートを自動で使用します")
 
     if st.button("データを再読み込み"):
         st.cache_data.clear()
@@ -310,7 +342,7 @@ yakusoku_df      = parse_yakusoku_sheet(yakusoku_rows)
 account_map = {}
 if account_sheet_id:
     try:
-        account_map = load_account_map(account_sheet_id, account_sheet_tab)
+        account_map = load_account_map(account_sheet_id)
     except Exception as e:
         st.warning(f"アカウントリストの読み込みに失敗しました: {e}")
 
@@ -342,6 +374,24 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ======================================
 with tab1:
     st.subheader("リスト別 成果一覧")
+
+    # ── AD列 空欄のみ更新 ──────────────────────────────
+    if account_sheet_id and account_map:
+        with st.expander("AD列（空欄のみ）を更新する"):
+            st.caption("AD列が空欄の行のみリスト名を書き込みます。既存の値は上書きしません。")
+            if st.button("空欄のみAD列に書き込む"):
+                try:
+                    with st.spinner("書き込み中..."):
+                        written, skipped = fill_empty_ad_column(
+                            spreadsheet_id, yakusoku_sheet, yakusoku_rows, account_map
+                        )
+                    st.success(f"完了: {written} 件書き込み、{skipped} 件スキップ（既存値あり）")
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"エラー: {e}")
+
+    st.markdown("---")
 
     if list_df.empty:
         st.info("約束データがないか、アカウントリストとの照合結果が0件です。")
