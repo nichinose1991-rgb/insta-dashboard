@@ -30,7 +30,7 @@ st.set_page_config(
 # ─────────────────────────────────────────────
 #  定数
 # ─────────────────────────────────────────────
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 DAILY_START_COL = 10   # K列（0インデックス）
 COLS_PER_DAY = 4       # 対象 / Fw / DM / 約束
 
@@ -138,6 +138,66 @@ def _safe_int(v) -> int:
         return 0
 
 
+# ─────────────────────────────────────────────
+#  Instagram URL → アカウントID
+# ─────────────────────────────────────────────
+def extract_instagram_id(url: str) -> str:
+    """https://www.instagram.com/username/ → username（小文字）"""
+    url = url.strip().rstrip("/")
+    m = re.search(r"instagram\.com/([^/?#]+)", url)
+    return m.group(1).lower() if m else ""
+
+
+# ─────────────────────────────────────────────
+#  アカウントリスト読み込み（スプレッドシート2）
+# ─────────────────────────────────────────────
+@st.cache_data(ttl=300)
+def load_account_map(sheet_id: str, sheet_tab: str) -> dict[str, str]:
+    """スプレッドシート2のA列(アカウントID) → F列(リスト名) の辞書を返す"""
+    rows = load_sheet(sheet_id, sheet_tab)
+    result = {}
+    for row in rows:
+        if len(row) >= 6:
+            account_id = row[0].strip().lower()
+            list_name  = row[5].strip()
+            if account_id and list_name:
+                result[account_id] = list_name
+    return result
+
+
+# ─────────────────────────────────────────────
+#  AD列書き込み
+# ─────────────────────────────────────────────
+def update_list_column(spreadsheet_id: str, yakusoku_sheet_name: str,
+                        yakusoku_rows: list, account_map: dict) -> tuple[int, int]:
+    """約束シートのAD列(index=29)にリスト名を書き込む。(一致数, 不一致数)を返す"""
+    gc = get_client()
+    sh = gc.open_by_key(spreadsheet_id)
+    titles = {w.title.strip(): w for w in sh.worksheets()}
+    ws = titles.get(yakusoku_sheet_name.strip())
+    if ws is None:
+        raise gspread.exceptions.WorksheetNotFound(yakusoku_sheet_name)
+
+    updates = []
+    matched = 0
+    unmatched = 0
+    for i, row in enumerate(yakusoku_rows[1:], start=2):  # 2行目から（1行目はヘッダ）
+        url = row[10].strip() if len(row) > 10 else ""   # K列
+        if not url:
+            continue
+        account_id = extract_instagram_id(url)
+        list_name  = account_map.get(account_id, "")
+        updates.append({"range": f"AD{i}", "values": [[list_name]]})
+        if list_name:
+            matched += 1
+        else:
+            unmatched += 1
+
+    if updates:
+        ws.batch_update(updates)
+    return matched, unmatched
+
+
 def parse_follow_sheet(rows: list[list]) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     フォロータブをパースして (たねまきをしている人累計DF, 日次活動DF) を返す。
@@ -221,7 +281,7 @@ def parse_yakusoku_sheet(rows: list[list]) -> pd.DataFrame:
     """
     約束タブをパースして約束一覧DFを返す。
 
-    列: B=月, C=日, H=担当者名, O=済（ステップアップ）, AA=成約
+    列: B=月, C=日, H=担当者名, K=InstagramURL, O=済（ステップアップ）, AA=成約, AD=対象リスト
     """
     records = []
     for row in rows[1:]:  # 1行目ヘッダをスキップ
@@ -231,13 +291,17 @@ def parse_yakusoku_sheet(rows: list[list]) -> pd.DataFrame:
         if not employee:
             continue
 
-        step_up  = bool(row[14].strip()) if len(row) > 14 else False
-        contract = bool(row[26].strip()) if len(row) > 26 else False
+        step_up   = bool(row[14].strip()) if len(row) > 14 else False
+        contract  = bool(row[26].strip()) if len(row) > 26 else False
+        insta_url = row[10].strip()       if len(row) > 10 else ""
+        list_name = row[29].strip()       if len(row) > 29 else ""  # AD列
 
         records.append({
             "月": _safe_int(row[1]),
             "日": _safe_int(row[2]),
             "担当者名": employee,
+            "Instagram URL": insta_url,
+            "対象リスト": list_name,
             "ステップアップ": step_up,
             "成約": contract,
         })
@@ -246,34 +310,14 @@ def parse_yakusoku_sheet(rows: list[list]) -> pd.DataFrame:
 
 
 # ─────────────────────────────────────────────
-#  分析: 約束日時点でどのリストを使っていたか特定
+#  分析: AD列の対象リストをそのまま使う
 # ─────────────────────────────────────────────
-def build_list_analysis(daily_df: pd.DataFrame, yakusoku_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    各約束について「約束日以前に最後に記録された対象リスト」を紐付ける。
-    """
-    if daily_df.empty or yakusoku_df.empty:
+def build_list_analysis(yakusoku_df: pd.DataFrame) -> pd.DataFrame:
+    """AD列に書き込まれた対象リスト列を使って集計用DFを返す"""
+    if yakusoku_df.empty or "対象リスト" not in yakusoku_df.columns:
         return pd.DataFrame()
-
-    results = []
-    active = daily_df[daily_df["対象"] != ""]
-
-    for _, appt in yakusoku_df.iterrows():
-        emp, day = appt["担当者名"], appt["日"]
-
-        candidate = active[(active["担当者名"] == emp) & (active["日"] <= day)]
-        target = candidate.sort_values("日").iloc[-1]["対象"] if not candidate.empty else "不明"
-
-        results.append({
-            "担当者名": emp,
-            "月": appt["月"],
-            "約束日": day,
-            "対象リスト": target,
-            "ステップアップ": appt["ステップアップ"],
-            "成約": appt["成約"],
-        })
-
-    return pd.DataFrame(results)
+    df = yakusoku_df[yakusoku_df["対象リスト"] != ""].copy()
+    return df[["担当者名", "月", "日", "対象リスト", "ステップアップ", "成約"]].copy()
 
 
 # ─────────────────────────────────────────────
@@ -283,12 +327,19 @@ with st.sidebar:
     st.header("設定")
 
     default_id = st.secrets.get("sheets", {}).get("spreadsheet_id", "")
-    spreadsheet_id = st.text_input("スプレッドシートID", value=default_id)
+    spreadsheet_id = st.text_input("スプレッドシートID（約束・フォロー）", value=default_id)
 
     default_follow = st.secrets.get("sheets", {}).get("follow_sheet", "インスタフォロー(R8/1)")
     default_appt   = st.secrets.get("sheets", {}).get("yakusoku_sheet", "インスタ約束(R8)")
     follow_sheet   = st.text_input("フォロータブ名", value=default_follow)
     yakusoku_sheet = st.text_input("約束タブ名", value=default_appt)
+
+    st.markdown("---")
+    st.subheader("アカウントリスト照合")
+    default_acct_id  = st.secrets.get("sheets", {}).get("account_sheet_id", "")
+    default_acct_tab = st.secrets.get("sheets", {}).get("account_sheet_tab", "シート1")
+    account_sheet_id  = st.text_input("アカウントリストのスプレッドシートID", value=default_acct_id)
+    account_sheet_tab = st.text_input("アカウントリストのタブ名", value=default_acct_tab)
 
     if st.button("データを再読み込み"):
         st.cache_data.clear()
@@ -312,7 +363,7 @@ with st.spinner("スプレッドシートを読み込み中..."):
 
 emp_df, daily_df = parse_follow_sheet(follow_rows)
 yakusoku_df      = parse_yakusoku_sheet(yakusoku_rows)
-list_df          = build_list_analysis(daily_df, yakusoku_df)
+list_df          = build_list_analysis(yakusoku_df)
 
 if emp_df.empty:
     st.error("フォロータブのデータを読み込めませんでした。シート名・IDを確認してください。")
@@ -340,6 +391,26 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ======================================
 with tab1:
     st.subheader("リスト別 成果一覧")
+
+    # ── AD列更新ボタン ──────────────────────────────
+    with st.expander("AD列（対象リスト）を更新する"):
+        st.caption("約束シートのK列URLをアカウントリストと照合し、AD列にリスト名を書き込みます。")
+        if not account_sheet_id:
+            st.warning("サイドバーでアカウントリストのスプレッドシートIDを入力してください。")
+        elif st.button("照合してAD列に書き込む"):
+            try:
+                with st.spinner("照合中..."):
+                    account_map = load_account_map(account_sheet_id, account_sheet_tab)
+                    matched, unmatched = update_list_column(
+                        spreadsheet_id, yakusoku_sheet, yakusoku_rows, account_map
+                    )
+                st.success(f"完了: {matched} 件一致、{unmatched} 件未一致")
+                st.cache_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"エラー: {e}")
+
+    st.markdown("---")
 
     if list_df.empty:
         st.info("約束データがないか、紐付けに必要な対象リスト情報が不足しています。")
