@@ -488,11 +488,7 @@ with tab1:
         display = list_stats.rename(columns={"ステップアップ数": "中期法施数", "成約数": "OBA数"})
         display_cols = ["対象リスト", "約束数", "中期法施数", "約束→中期法施率(%)", "OBA数", "約束→OBA率(%)"]
 
-        sc1, sc2 = st.columns([2, 1])
-        sort_col1  = sc1.selectbox("並び替え", display_cols, index=display_cols.index("OBA数"), key="tab1_sort_col")
-        sort_order1 = sc2.radio("順序", ["降順", "昇順"], horizontal=True, key="tab1_sort_ord")
-        display = display[display_cols].sort_values(sort_col1, ascending=(sort_order1 == "昇順")).reset_index(drop=True)
-        st.dataframe(display, use_container_width=True, hide_index=True)
+        st.dataframe(display[display_cols], use_container_width=True, hide_index=True)
 
 
 # ======================================
@@ -523,11 +519,7 @@ with tab2:
     if "成約数" in stats.columns:
         display_cols += ["成約数", "約束→成約率(%)"]
 
-    sc1, sc2 = st.columns([2, 1])
-    sort_col2   = sc1.selectbox("並び替え", display_cols, index=display_cols.index("フォロー累計"), key="tab2_sort_col")
-    sort_order2 = sc2.radio("順序", ["降順", "昇順"], horizontal=True, key="tab2_sort_ord")
-    stats_disp = stats[display_cols].sort_values(sort_col2, ascending=(sort_order2 == "昇順")).reset_index(drop=True)
-    st.dataframe(stats_disp, use_container_width=True, hide_index=True)
+    st.dataframe(stats[display_cols], use_container_width=True, hide_index=True)
 
 
 # ======================================
