@@ -488,7 +488,11 @@ with tab1:
         display = list_stats.rename(columns={"ステップアップ数": "中期法施数", "成約数": "OBA数"})
         display_cols = ["対象リスト", "約束数", "中期法施数", "約束→中期法施率(%)", "OBA数", "約束→OBA率(%)"]
 
-        st.table(display[display_cols].set_index("対象リスト"))
+        sc1, sc2 = st.columns([2, 1])
+        sort_col  = sc1.selectbox("並び替え", display_cols[1:], index=display_cols[1:].index("OBA数"), key="t1_col")
+        sort_asc  = sc2.radio("順序", ["降順", "昇順"], horizontal=True, key="t1_ord") == "昇順"
+        display = display[display_cols].sort_values(sort_col, ascending=sort_asc).set_index("対象リスト")
+        st.table(display)
 
 
 # ======================================
@@ -519,7 +523,11 @@ with tab2:
     if "成約数" in stats.columns:
         display_cols += ["成約数", "約束→成約率(%)"]
 
-    st.table(stats[display_cols].set_index("担当者名"))
+    sc1, sc2 = st.columns([2, 1])
+    sort_col  = sc1.selectbox("並び替え", display_cols[1:], index=display_cols[1:].index("フォロー累計"), key="t2_col")
+    sort_asc  = sc2.radio("順序", ["降順", "昇順"], horizontal=True, key="t2_ord") == "昇順"
+    stats_disp = stats[display_cols].sort_values(sort_col, ascending=sort_asc).set_index("担当者名")
+    st.table(stats_disp)
 
 
 # ======================================
@@ -556,7 +564,10 @@ with tab3:
             st.success("該当者なし")
         else:
             cols = ["担当者名", "アカウント名", "本部", "フォロー累計", "DM累計", "フォロー→DM率(%)"]
-            st.table(low_dm[cols].set_index("担当者名"))
+            sc1, sc2 = st.columns([2, 1])
+            sort_col = sc1.selectbox("並び替え", cols[1:], index=cols[1:].index("フォロー→DM率(%)"), key="t3a_col")
+            sort_asc = sc2.radio("順序", ["降順", "昇順"], horizontal=True, key="t3a_ord") == "昇順"
+            st.table(low_dm[cols].sort_values(sort_col, ascending=sort_asc).set_index("担当者名"))
 
         st.markdown("---")
 
@@ -569,7 +580,10 @@ with tab3:
             st.success("該当者なし")
         else:
             cols = ["担当者名", "アカウント名", "本部", "DM累計", "約束累計", "DM→約束率(%)"]
-            st.table(low_appt[cols].set_index("担当者名"))
+            sc1, sc2 = st.columns([2, 1])
+            sort_col = sc1.selectbox("並び替え", cols[1:], index=cols[1:].index("DM→約束率(%)"), key="t3b_col")
+            sort_asc = sc2.radio("順序", ["降順", "昇順"], horizontal=True, key="t3b_ord") == "昇順"
+            st.table(low_appt[cols].sort_values(sort_col, ascending=sort_asc).set_index("担当者名"))
 
         st.markdown("---")
         st.subheader("異常値レポートをメールで送信")
