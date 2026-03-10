@@ -333,10 +333,8 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("スプレッドシートの共有設定")
     st.info(
-        "スプレッドシートを読み込むには、以下のサービスアカウントを共有してください。\n\n"
-        "📧 `insta-dashboard@gen-lang-client-0366687858.iam.gserviceaccount.com`\n\n"
-        "- **データ読み取りのみ** → 「閲覧者」で OK\n"
-        "- **AD列への書き込みも行う場合** → 「編集者」が必要です"
+        "スプレッドシートを読み込むには、以下のサービスアカウントを「編集者」として共有してください。\n\n"
+        "📧 `insta-dashboard@gen-lang-client-0366687858.iam.gserviceaccount.com`"
     )
 
     st.markdown("---")
