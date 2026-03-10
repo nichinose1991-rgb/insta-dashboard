@@ -112,7 +112,6 @@ def send_anomaly_email(html_body: str) -> str:
 # ─────────────────────────────────────────────
 #  Google Sheets 接続
 # ─────────────────────────────────────────────
-@st.cache_resource
 def get_client():
     creds = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"], scopes=SCOPES
@@ -154,7 +153,6 @@ def extract_instagram_id(url: str) -> str:
 # ─────────────────────────────────────────────
 #  アカウントリスト読み込み（スプレッドシート2）
 # ─────────────────────────────────────────────
-@st.cache_data(ttl=300)
 def load_account_map(sheet_id: str, sheet_tab: str) -> dict[str, str]:
     """スプレッドシート2のA列(アカウントID) → F列(リスト名) の辞書を返す"""
     gc = get_client()
