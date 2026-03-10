@@ -156,12 +156,11 @@ def load_account_map(sheet_id: str, sheet_tab: str) -> dict[str, str]:
     """スプレッドシート2のA列(アカウントID) → F列(リスト名) の辞書を返す"""
     rows = load_sheet(sheet_id, sheet_tab)
     result = {}
-    EXCLUDE_LIST_NAMES = {"対象アカ"}
     for row in rows:
         if len(row) >= 6:
             account_id = row[0].strip().lower()
             list_name  = row[5].strip()
-            if account_id and list_name and list_name not in EXCLUDE_LIST_NAMES:
+            if account_id and list_name and re.match(r'^[a-zA-Z0-9\s\-_.]+$', list_name):
                 result[account_id] = list_name
     return result
 
