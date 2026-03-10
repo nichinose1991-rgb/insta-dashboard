@@ -30,7 +30,10 @@ st.set_page_config(
 # ─────────────────────────────────────────────
 #  定数
 # ─────────────────────────────────────────────
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
 DAILY_START_COL = 10   # K列（0インデックス）
 COLS_PER_DAY = 4       # 対象 / Fw / DM / 約束
 
