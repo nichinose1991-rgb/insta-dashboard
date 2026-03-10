@@ -154,7 +154,14 @@ def extract_instagram_id(url: str) -> str:
 @st.cache_data(ttl=300)
 def load_account_map(sheet_id: str, sheet_tab: str) -> dict[str, str]:
     """スプレッドシート2のA列(アカウントID) → F列(リスト名) の辞書を返す"""
-    rows = load_sheet(sheet_id, sheet_tab)
+    gc = get_client()
+    sh = gc.open_by_key(sheet_id)
+    titles = {w.title.strip(): w for w in sh.worksheets()}
+    ws = titles.get(sheet_tab.strip())
+    if ws is None:
+        available = list(titles.keys())
+        raise ValueError(f"タブ '{sheet_tab}' が見つかりません。利用可能なタブ: {available}")
+    rows = ws.get_all_values()
     result = {}
     for row in rows:
         if len(row) >= 6:
@@ -176,7 +183,8 @@ def update_list_column(spreadsheet_id: str, yakusoku_sheet_name: str,
     titles = {w.title.strip(): w for w in sh.worksheets()}
     ws = titles.get(yakusoku_sheet_name.strip())
     if ws is None:
-        raise gspread.exceptions.WorksheetNotFound(yakusoku_sheet_name)
+        available = list(titles.keys())
+        raise ValueError(f"タブ '{yakusoku_sheet_name}' が見つかりません。利用可能なタブ: {available}")
 
     updates = []
     matched = 0
@@ -312,11 +320,17 @@ def parse_yakusoku_sheet(rows: list[list]) -> pd.DataFrame:
 # ─────────────────────────────────────────────
 #  分析: AD列の対象リストをそのまま使う
 # ─────────────────────────────────────────────
+EXCLUDE_LIST_NAMES = {"対象アカ"}
+
 def build_list_analysis(yakusoku_df: pd.DataFrame) -> pd.DataFrame:
     """AD列に書き込まれた対象リスト列を使って集計用DFを返す"""
     if yakusoku_df.empty or "対象リスト" not in yakusoku_df.columns:
         return pd.DataFrame()
-    df = yakusoku_df[yakusoku_df["対象リスト"] != ""].copy()
+    df = yakusoku_df[
+        (yakusoku_df["対象リスト"] != "") &
+        (~yakusoku_df["対象リスト"].isin(EXCLUDE_LIST_NAMES)) &
+        (yakusoku_df["対象リスト"].str.match(r'^[a-zA-Z0-9\s\-_.]+$', na=False))
+    ].copy()
     return df[["担当者名", "月", "日", "対象リスト", "ステップアップ", "成約"]].copy()
 
 
