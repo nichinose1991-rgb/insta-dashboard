@@ -484,15 +484,16 @@ with tab1:
         ).round(1)
         list_stats["約束→中期法施率(%)"] = (
             list_stats["ステップアップ数"] / list_stats["約束数"].replace(0, float("nan")) * 100
-        ).round(1)
+        ).round(2)
         display = list_stats.rename(columns={"ステップアップ数": "中期法施数", "成約数": "OBA数"})
         display_cols = ["対象リスト", "約束数", "中期法施数", "約束→中期法施率(%)", "OBA数", "約束→OBA率(%)"]
-
-        sc1, sc2 = st.columns([2, 1])
-        sort_col  = sc1.selectbox("並び替え", display_cols[1:], index=display_cols[1:].index("OBA数"), key="t1_col")
-        sort_asc  = sc2.radio("順序", ["降順", "昇順"], horizontal=True, key="t1_ord") == "昇順"
-        display = display[display_cols].sort_values(sort_col, ascending=sort_asc).set_index("対象リスト")
-        st.table(display)
+        pct_fmt = st.column_config.NumberColumn(format="%.2f")
+        st.dataframe(
+            display[display_cols],
+            use_container_width=True,
+            hide_index=True,
+            column_config={"約束→中期法施率(%)": pct_fmt, "約束→OBA率(%)": pct_fmt},
+        )
 
 
 # ======================================
@@ -504,7 +505,7 @@ with tab2:
     stats = emp_df.copy()
     stats["DM→約束率(%)"] = (
         stats["約束累計"] / stats["DM累計"].replace(0, float("nan")) * 100
-    ).round(1)
+    ).round(2)
 
     if not list_df.empty:
         emp_contract = (
@@ -517,17 +518,17 @@ with tab2:
         stats["成約数"] = stats["成約数"].fillna(0).astype(int)
         stats["約束→成約率(%)"] = (
             stats["成約数"] / stats["約束累計"].replace(0, float("nan")) * 100
-        ).round(1)
+        ).round(2)
 
     display_cols = ["担当者名", "アカウント名", "本部", "フォロー累計", "DM累計", "約束累計", "DM→約束率(%)"]
     if "成約数" in stats.columns:
         display_cols += ["成約数", "約束→成約率(%)"]
 
-    sc1, sc2 = st.columns([2, 1])
-    sort_col  = sc1.selectbox("並び替え", display_cols[1:], index=display_cols[1:].index("フォロー累計"), key="t2_col")
-    sort_asc  = sc2.radio("順序", ["降順", "昇順"], horizontal=True, key="t2_ord") == "昇順"
-    stats_disp = stats[display_cols].sort_values(sort_col, ascending=sort_asc).set_index("担当者名")
-    st.table(stats_disp)
+    pct_fmt = st.column_config.NumberColumn(format="%.2f")
+    col_cfg = {"DM→約束率(%)": pct_fmt}
+    if "約束→成約率(%)" in display_cols:
+        col_cfg["約束→成約率(%)"] = pct_fmt
+    st.dataframe(stats[display_cols], use_container_width=True, hide_index=True, column_config=col_cfg)
 
 
 # ======================================
@@ -542,16 +543,16 @@ with tab3:
         check = emp_df.copy()
         check["フォロー→DM率(%)"] = (
             check["DM累計"] / check["フォロー累計"].replace(0, float("nan")) * 100
-        ).round(1)
+        ).round(2)
         check["DM→約束率(%)"] = (
             check["約束累計"] / check["DM累計"].replace(0, float("nan")) * 100
-        ).round(1)
+        ).round(2)
 
         avg_follow_dm = check["フォロー→DM率(%)"].mean()
         avg_dm_appt   = check["DM→約束率(%)"].mean()
 
         st.markdown(
-            f"全体平均　フォロー→DM率: **{avg_follow_dm:.1f}%**　／　DM→約束率: **{avg_dm_appt:.1f}%**"
+            f"全体平均　フォロー→DM率: **{avg_follow_dm:.2f}%**　／　DM→約束率: **{avg_dm_appt:.2f}%**"
         )
         st.markdown("---")
 
@@ -564,10 +565,9 @@ with tab3:
             st.success("該当者なし")
         else:
             cols = ["担当者名", "アカウント名", "本部", "フォロー累計", "DM累計", "フォロー→DM率(%)"]
-            sc1, sc2 = st.columns([2, 1])
-            sort_col = sc1.selectbox("並び替え", cols[1:], index=cols[1:].index("フォロー→DM率(%)"), key="t3a_col")
-            sort_asc = sc2.radio("順序", ["降順", "昇順"], horizontal=True, key="t3a_ord") == "昇順"
-            st.table(low_dm[cols].sort_values(sort_col, ascending=sort_asc).set_index("担当者名"))
+            pct_fmt = st.column_config.NumberColumn(format="%.2f")
+            st.dataframe(low_dm[cols], use_container_width=True, hide_index=True,
+                         column_config={"フォロー→DM率(%)": pct_fmt})
 
         st.markdown("---")
 
@@ -580,10 +580,9 @@ with tab3:
             st.success("該当者なし")
         else:
             cols = ["担当者名", "アカウント名", "本部", "DM累計", "約束累計", "DM→約束率(%)"]
-            sc1, sc2 = st.columns([2, 1])
-            sort_col = sc1.selectbox("並び替え", cols[1:], index=cols[1:].index("DM→約束率(%)"), key="t3b_col")
-            sort_asc = sc2.radio("順序", ["降順", "昇順"], horizontal=True, key="t3b_ord") == "昇順"
-            st.table(low_appt[cols].sort_values(sort_col, ascending=sort_asc).set_index("担当者名"))
+            pct_fmt = st.column_config.NumberColumn(format="%.2f")
+            st.dataframe(low_appt[cols], use_container_width=True, hide_index=True,
+                         column_config={"DM→約束率(%)": pct_fmt})
 
         st.markdown("---")
         st.subheader("異常値レポートをメールで送信")
