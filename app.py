@@ -105,14 +105,25 @@ def send_anomaly_email(html_body: str) -> str:
 
 
 # ─────────────────────────────────────────────
-#  Google Sheets 接続（読み取り専用）
+#  Google Sheets 接続
 # ─────────────────────────────────────────────
 @st.cache_resource
 def get_client():
+    """読み取り用クライアント（キャッシュあり）"""
     creds = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"], scopes=SCOPES
+        dict(st.secrets["gcp_service_account"]),
+        scopes=["https://www.googleapis.com/auth/spreadsheets.readonly"],
     )
-    return gspread.authorize(creds)
+    return gspread.Client(auth=creds)
+
+
+def get_write_client():
+    """書き込み用クライアント（キャッシュなし・毎回新規作成）"""
+    creds = Credentials.from_service_account_info(
+        dict(st.secrets["gcp_service_account"]),
+        scopes=["https://www.googleapis.com/auth/spreadsheets"],
+    )
+    return gspread.Client(auth=creds)
 
 
 @st.cache_data(ttl=300)
@@ -164,7 +175,7 @@ def load_account_map(sheet_id: str) -> dict:
 def fill_empty_ad_column(spreadsheet_id: str, yakusoku_sheet_name: str,
                           yakusoku_rows: list, account_map: dict) -> tuple[int, int]:
     """AD列が空欄の行のみリスト名を書き込む。(書き込み数, スキップ数)を返す"""
-    gc = get_client()
+    gc = get_write_client()
     sh = gc.open_by_key(spreadsheet_id)
     titles = {w.title.strip(): w for w in sh.worksheets()}
     ws = titles.get(yakusoku_sheet_name.strip())
