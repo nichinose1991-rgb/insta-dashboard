@@ -355,8 +355,11 @@ def build_list_analysis(yakusoku_df: pd.DataFrame, account_map: dict) -> pd.Data
 with st.sidebar:
     st.header("設定")
 
-    default_id = st.secrets.get("sheets", {}).get("spreadsheet_id", "")
-    spreadsheet_id = st.text_input("スプレッドシートID（約束・フォロー）", value=default_id)
+    default_yakusoku_id = st.secrets.get("sheets", {}).get("yakusoku_spreadsheet_id", "15G-BXsnDZaF7ZzTnTCyqPeTCcZbKYCAEOKqdlVzdXZ8")
+    spreadsheet_id_yakusoku = st.text_input("スプレッドシートID（約束）", value=default_yakusoku_id)
+
+    default_follow_id = st.secrets.get("sheets", {}).get("follow_spreadsheet_id", "1urh-mtbJmBFYlfSZazeAJTjDlnQ5wS6JAZqIKBJn5VI")
+    spreadsheet_id_follow = st.text_input("スプレッドシートID（フォロー）", value=default_follow_id)
 
     default_follow = st.secrets.get("sheets", {}).get("follow_sheet", "インスタフォロー(R8/1)")
     default_appt   = st.secrets.get("sheets", {}).get("yakusoku_sheet", "インスタ約束(R8)")
@@ -395,13 +398,13 @@ with st.sidebar:
 # ─────────────────────────────────────────────
 st.title("インスタ活動分析ダッシュボード")
 
-if not spreadsheet_id:
+if not spreadsheet_id_yakusoku or not spreadsheet_id_follow:
     st.info("サイドバーでスプレッドシートIDを入力してください。")
     st.stop()
 
 with st.spinner("スプレッドシートを読み込み中..."):
-    follow_rows   = load_sheet(spreadsheet_id, follow_sheet)
-    yakusoku_rows = load_sheet(spreadsheet_id, yakusoku_sheet)
+    follow_rows   = load_sheet(spreadsheet_id_follow, follow_sheet)
+    yakusoku_rows = load_sheet(spreadsheet_id_yakusoku, yakusoku_sheet)
 
 emp_df, daily_df = parse_follow_sheet(follow_rows)
 yakusoku_df      = parse_yakusoku_sheet(yakusoku_rows)
@@ -457,7 +460,7 @@ with tab1:
                 try:
                     with st.spinner("書き込み中..."):
                         written, skipped = fill_empty_ad_column(
-                            spreadsheet_id, yakusoku_sheet, yakusoku_rows, account_map
+                            spreadsheet_id_yakusoku, yakusoku_sheet, yakusoku_rows, account_map
                         )
                     st.success(f"完了: {written} 件書き込み、{skipped} 件スキップ（既存値あり）")
                     st.cache_data.clear()
