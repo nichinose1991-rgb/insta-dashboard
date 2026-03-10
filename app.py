@@ -488,7 +488,7 @@ with tab1:
         display = list_stats.rename(columns={"ステップアップ数": "中期法施数", "成約数": "OBA数"})
         display_cols = ["対象リスト", "約束数", "中期法施数", "約束→中期法施率(%)", "OBA数", "約束→OBA率(%)"]
 
-        st.dataframe(display[display_cols], use_container_width=True, hide_index=True)
+        st.table(display[display_cols].set_index("対象リスト"))
 
 
 # ======================================
@@ -519,7 +519,7 @@ with tab2:
     if "成約数" in stats.columns:
         display_cols += ["成約数", "約束→成約率(%)"]
 
-    st.dataframe(stats[display_cols], use_container_width=True, hide_index=True)
+    st.table(stats[display_cols].set_index("担当者名"))
 
 
 # ======================================
@@ -556,7 +556,7 @@ with tab3:
             st.success("該当者なし")
         else:
             cols = ["担当者名", "アカウント名", "本部", "フォロー累計", "DM累計", "フォロー→DM率(%)"]
-            st.dataframe(low_dm[cols], use_container_width=True, hide_index=True)
+            st.table(low_dm[cols].set_index("担当者名"))
 
         st.markdown("---")
 
@@ -569,7 +569,7 @@ with tab3:
             st.success("該当者なし")
         else:
             cols = ["担当者名", "アカウント名", "本部", "DM累計", "約束累計", "DM→約束率(%)"]
-            st.dataframe(low_appt[cols], use_container_width=True, hide_index=True)
+            st.table(low_appt[cols].set_index("担当者名"))
 
         st.markdown("---")
         st.subheader("異常値レポートをメールで送信")
